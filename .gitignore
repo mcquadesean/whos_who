@@ -1,0 +1,10 @@
+data/
+results/
+logs/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
+.ipynb_checkpoints/
+.DS_Store

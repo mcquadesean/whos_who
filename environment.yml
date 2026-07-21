@@ -1,0 +1,17 @@
+name: whos_who
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pandas
+  - numpy
+  - matplotlib
+  - jupyterlab
+  - ipykernel
+  - python-dotenv
+  - tqdm
+  - pymupdf
+  - pytesseract
+  - pdf2image
+  - ebooklib
+  - beautifulsoup4
