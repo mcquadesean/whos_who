@@ -1,81 +1,79 @@
 # Who's Who — HathiTrust Capsule Runbook
 
 Extract structured biographical records from the 337 HathiTrust volumes (11 Marquis
-series) **inside the HTRC Data Capsule**, before HathiTrust access ends **September 2026**.
+series) before HathiTrust access ends **September 30, 2026**.
 
-Because the volumes are in-copyright, OCR text cannot leave the capsule — segmentation
-**and** LLM extraction both run inside it; only the derived JSONL is exported (via HTRC
-export review).
+**Architecture (mirrors the approved S&P path):** the capsule only *segments* the
+in-copyright OCR into per-person `raw_entry` blocks. HTRC already ruled the `raw_entry`
+column is "wholly factual data, non-consumptive," so we **release the segmented CSVs** and
+run the heavy 121-field LLM extraction on **KLC GPUs** — not on the capsule's slow CPU.
 
-Files in this directory:
-- `ids.txt` — 337 htids (all HT volumes across the 11 series)
-- `whos_who_ht_manifest.csv` — htid, series_id, year, rights, title
-- `dl.sh` — download volumes → `/media/secure_volume/vols`
-- `parse_whoswho.py` — page → per-person entry segmenter
-- `inspect_volume.py` — calibration: dump sample entries from one volume
-- `segment_all.sh` — segment every volume → `/media/secure_volume/parsed`
-- `extract_whoswho_llm.py` — full-schema LLM field extractor
-- `extract_all.sh` — run extractor over every segmented CSV → `/media/secure_volume/llm_out`
+```
+  CAPSULE (secure):  htrc download -> segment -> filter_release -> releaseresults
+  HTRC review        (approves the raw_entry CSVs, ~48h)
+  KLC (GPU):         download release -> vLLM + extract_whoswho_llm.py -> JSONL
+```
 
----
-
-## Phase A — Maintenance mode (internet on)
-
-1. Clone the kit into the capsule:
-   ```
-   git clone https://github.com/mcquadesean/whos_who.git
-   cd whos_who/capsule
-   ```
-2. Python deps: `pip install tqdm`  (segmenter needs only stdlib + tqdm).
-3. Stand up a **local model server** for extraction (CPU, quantized — the capsule has no
-   GPU). Reuse the in-capsule GGUF/llama.cpp setup from the S&P work:
-   ```
-   # e.g. llama.cpp server exposing an OpenAI-compatible endpoint on :8000
-   ./server -m <model>.gguf --port 8000 -c 4096
-   ```
-   The heavier schema wants a capable instruct model; confirm quality on the calibration
-   sample (Phase C) before the full run. Download the model weights now (needs internet).
-
-## Phase B — Secure mode: download
-
-4. Switch the capsule to **secure mode** and download the corpus:
-   ```
-   ./dl.sh
-   ```
-   Downloads all 337 volumes into `/media/secure_volume/vols`.
-
-## Phase C — Calibrate (one volume)
-
-5. Point `inspect_volume.py` at one downloaded volume and eyeball the segmentation:
-   ```
-   python inspect_volume.py /media/secure_volume/vols/<enc-htid-dir> --n 20
-   ```
-   If name-headers are being missed or noise is captured, tweak `NAME_HEADER_RE` /
-   `RUNNING_HEADER_RE` in `parse_whoswho.py`. Then extract a few entries as a spot-check:
-   ```
-   python parse_whoswho.py <vol_dir> --htid <h> --series <S> --year <Y> --out /tmp/one.csv
-   python extract_whoswho_llm.py --in /tmp/one.csv --out /tmp/one.jsonl --limit 10
-   ```
-   Inspect `/tmp/one.jsonl` — adjust the model or add few-shot examples to the prompt if
-   fields are being missed. **Do not run the full set until this looks right.**
-
-## Phase D — Full run
-
-6. Segment everything, then extract:
-   ```
-   ./segment_all.sh
-   SERVER=http://localhost:8000 MODEL=<name> ./extract_all.sh
-   ```
-   Both are resumable — re-run to continue after interruption.
-
-## Phase E — Export
-
-7. Output is `/media/secure_volume/llm_out/*.jsonl` (one file per volume, nested records +
-   `raw_entry`). Request HTRC **export review** for the derived JSONL. Once out, land it in
-   `/gpfs/kellogg/proj/mke060/shared_sm/whos_who/data/processed/` and dedupe people across
-   editions downstream.
+## ⚠️ Capsule gotchas (from the S&P runs — read first)
+- **To change modes, SHUT DOWN and RESTART from the portal — never the mode-switch
+  button** (it bricked the capsule into an ERROR state that needed an HTRC admin reset).
+  Verify the portal shows the expected mode before acting. `/media/secure_volume` persists.
+- **`git pull` / model downloads need MAINTENANCE mode** (secure has no internet).
+- **Paste is disabled in secure-mode VNC** — hand-type; keep commands short; no heredocs/`sed`.
+- **In-capsule Python is `/opt/anaconda/bin/python`** (bare `python` is absent).
+- HTRC release is a terminal tool, not a portal button: `releaseresults add <tar>` then
+  `releaseresults done`.
 
 ---
 
-**Priority:** the ~1930s–1980s in-copyright run exists *only* here and disappears in
-September — front-load those series (regionals, Finance & Industry) if capsule time is tight.
+## Phase A — Maintenance mode: get the kit
+```
+git clone https://github.com/mcquadesean/whos_who.git   # or: cd whos_who && git pull
+cd whos_who/capsule
+pip install tqdm
+```
+
+## Phase B — Secure mode: download + segment
+```
+./dl.sh                       # 337 vols -> /media/secure_volume/vols
+```
+Calibrate on ONE volume before the full run:
+```
+/opt/anaconda/bin/python inspect_volume.py /media/secure_volume/vols/<a-vol-dir> --n 20
+```
+Check the kept/dropped counts and that headers are real entries. If off, tweak
+`NAME_HEADER_RE` in `parse_whoswho.py` (pull the fix from GitHub in maintenance mode).
+Then segment everything:
+```
+PY=/opt/anaconda/bin/python ./segment_all.sh    # -> /media/secure_volume/parsed
+```
+
+## Phase C — Secure mode: filter + release
+```
+/opt/anaconda/bin/python filter_release.py --max-words 350
+```
+Inspect the "longest DROPPED" (should all be paratext) and "longest KEPT" (should be real
+prolific bios, not clipped); adjust `--max-words` if needed. Then bundle + submit:
+```
+cd /media/secure_volume && tar czf ~/whoswho_raw.tar.gz -C release .
+releaseresults add ~/whoswho_raw.tar.gz
+releaseresults done
+```
+HTRC reviews (~48h); approval email → download link.
+
+## Phase D — KLC (GPU): extract
+Stage the approved CSVs, set up the env once, then run the extractor over them:
+```
+mkdir -p /gpfs/kellogg/proj/mke060/shared_sm/whos_who/data/processed/released_csv
+#   (extract the downloaded tarball into released_csv/)
+bash ~/mcquade_projects/whos_who/jobs/setup_vllm_env.sh        # one-time
+sbatch ~/mcquade_projects/whos_who/jobs/run_extract.sh         # serves vLLM + extracts all
+```
+Output: `data/processed/llm_out/*.jsonl` (nested records + `raw_entry`), resumable.
+Downstream: filter `is_person_entry`, then dedupe people across editions.
+
+---
+
+**Priority:** the 1930s–1980s in-copyright run exists *only* in HathiTrust and disappears
+Sept 30 — get those series (regionals, Finance & Industry) downloaded + segmented + released
+first, so they clear review before the deadline. KLC extraction has no deadline.
