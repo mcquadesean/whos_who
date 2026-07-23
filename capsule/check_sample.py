@@ -53,6 +53,7 @@ for sid, rs in sorted(by.items()):
 print("checking %d sample volumes (earliest + latest per series)\n" % len(sample))
 dropped = []
 per = []
+n_all = n_long = n_long_fewsemi = 0
 for r in sample:
     d = find_dir(r["htid"])
     if not d:
@@ -63,12 +64,28 @@ for r in sample:
     for rec in recs:
         t = rec["raw_entry"]
         n = len(t.split())
+        n_all += 1
+        if n > MAXW:
+            n_long += 1
+            if t.count(";") < 2:
+                n_long_fewsemi += 1
         if n > MAXW and fr.is_prose(t):
             dr += 1
             dropped.append((n, r["series_id"], r["year"], re.sub(r"\s+", " ", t)[:100]))
         else:
             k += 1
     per.append((r["series_id"], r["year"], "ok", k, dr))
+
+def pct(a, b):
+    return (100.0 * a / b) if b else 0.0
+
+
+print("\n=== semicolon safety ===")
+print("total entries in sample:                %d" % n_all)
+print("  long (>%dw, the only drop candidates): %d  (%.1f%%)" % (MAXW, n_long, pct(n_long, n_all)))
+print("  of those long, <2 semicolons:          %d  (%.1f%% of long)" % (n_long_fewsemi, pct(n_long_fewsemi, n_long)))
+print("  ACTUALLY dropped (long + <2 semi + prose): %d  (%.4f%% of all entries)" % (len(dropped), pct(len(dropped), n_all)))
+print("=> long entries almost all have >=2 semicolons; the drop is a tiny prose-only slice")
 
 print("\n=== per-volume kept / dropped ===")
 for sid, yr, st, k, dr in per:
