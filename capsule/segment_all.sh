@@ -3,7 +3,7 @@
 # Run INSIDE the capsule after dl.sh. Resumable (skips volumes already segmented).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-PY="${PY:-python3}"
+PY="${PY:-/opt/anaconda/bin/python}"
 VOLS=/media/secure_volume/vols
 OUT=/media/secure_volume/parsed
 mkdir -p "$OUT"
