@@ -38,11 +38,19 @@ def word_count(text):
 
 
 def is_prose(text):
-    words = re.findall(r"[a-z]+", text.lower())
-    if len(words) < 20:
+    words = text.split()
+    if len(words) < 60:
         return False
-    stop = sum(1 for w in words if w in STOPWORDS)
-    return stop / len(words) > 0.15
+    # a real directory entry is a semicolon-delimited field list; keep it no matter
+    # how long or how prose-y its award/publication text reads
+    if text.count(";") >= 3:
+        return False
+    # long AND semicolon-poor: drop only if it is also grammatical prose (ads/prefaces),
+    # not a factual index (which has low function-word density)
+    low = re.findall(r"[a-z]+", text.lower())
+    if not low:
+        return False
+    return sum(1 for w in low if w in STOPWORDS) / len(low) > 0.15
 
 
 def main():

@@ -18,7 +18,7 @@ import parse_whoswho as pw       # noqa: E402
 import filter_release as fr      # noqa: E402
 
 VOLS = "/media/secure_volume/vols"
-MAXW = 400
+MAXW = 250
 
 
 def enc(h):
