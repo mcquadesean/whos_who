@@ -63,7 +63,7 @@ for r in sample:
     for rec in recs:
         t = rec["raw_entry"]
         n = len(t.split())
-        if n > MAXW and not fr.is_factual_person(t):
+        if n > MAXW and fr.is_prose(t):
             dr += 1
             dropped.append((n, r["series_id"], r["year"], re.sub(r"\s+", " ", t)[:100]))
         else:
