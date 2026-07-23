@@ -22,26 +22,35 @@ except ImportError:
     def tqdm(x, **k):
         return x
 
-# A factual person entry carries lowercase biographical markers: born "b. ",
-# parentage "s./d. <Name> and ...", marriage "m. ". Index lines / prefaces /
-# abbreviation tables do not. (Case-sensitive: "B." is a middle initial, not born.)
-BIO_MARKER = re.compile(r"(?:^|[;\s])(?:b|m)\.\s|(?:^|[;\s])[sd]\.\s+[A-Z]")
+# Person entries and factual indexes are telegraphic (abbreviations, dates, semicolons)
+# and use almost no function words. Prose paratext — prefaces, school/college ads — is
+# full grammatical English with a high function-word density. Drop only long PROSE, so we
+# never lose a real biography (robust to OCR-garbled/absent/spelled-out "b." markers).
+STOPWORDS = frozenset((
+    "the and of to in a is was for with that as are this from at by an be or on his "
+    "her their its it he she they we you not have has had were will would can could all "
+    "any but if into more most other some such than then there these those which who "
+    "whom whose about after before between during over under out up down been being").split())
 
 
 def word_count(text):
     return len(text.split())
 
 
-def is_factual_person(text):
-    return bool(BIO_MARKER.search(text))
+def is_prose(text):
+    words = re.findall(r"[a-z]+", text.lower())
+    if len(words) < 20:
+        return False
+    stop = sum(1 for w in words if w in STOPWORDS)
+    return stop / len(words) > 0.15
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in-dir", default="/media/secure_volume/parsed")
     ap.add_argument("--out-dir", default="/media/secure_volume/release")
-    ap.add_argument("--max-words", type=int, default=400,
-                    help="drop a block only if it exceeds this AND lacks a bio marker")
+    ap.add_argument("--max-words", type=int, default=250,
+                    help="drop a block only if it exceeds this AND reads as prose")
     ap.add_argument("--show", type=int, default=30)
     a = ap.parse_args()
 
@@ -62,9 +71,9 @@ def main():
         for row in rows:
             text = row.get("raw_entry", "")
             n = word_count(text)
-            # drop only long blocks that are NOT factual person entries
-            # (index / preface / abbreviation tables); keep prolific real bios.
-            if n > a.max_words and not is_factual_person(text):
+            # drop only long PROSE blocks (prefaces, school/college ads); keep all
+            # telegraphic person entries and factual indexes regardless of length.
+            if n > a.max_words and is_prose(text):
                 dropped.append((n, name, text[:140]))
             else:
                 kept.append(row)
