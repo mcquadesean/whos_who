@@ -117,6 +117,10 @@ RULES
   named_chair, "emeritus"->emeritus, "Vis. prof."->visiting.
 - Cross-reference only ("see X"): record_type="cross_reference", is_person_entry=false,
   cross_reference_to="X", everything else null/[].
+- If the text is NOT a person's biographical entry — a preface/preamble, an index line
+  ("Smith, John 234"), a table of abbreviations, an editorial/staff list, an advertisement,
+  or a section header — set is_person_entry=false and leave all fields null/[]. These are
+  filtered downstream; do not fabricate an entry from them.
 - OCR REPAIR: fix obvious scan corruptions to the intended text, e.g.
     "Htarted"->"Started", "Willlam"->"William", "U. of Chica0"->"U. of Chicago",
     "B.A., Yale, 18S1"->"1881", "geologrist"->"geologist", "8. William"->"s. William".

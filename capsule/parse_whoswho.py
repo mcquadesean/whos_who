@@ -29,6 +29,13 @@ PAGE_NUMBER_RE = re.compile(r"^\d{1,5}$")
 NAME_HEADER_RE = re.compile(r"^([A-Z][A-Z .,'’&-]{1,60}?),\s+([A-Z][A-Za-z].*)$")
 BIRTH_RE = re.compile(r"\bb\.\s*([^;]+)", re.IGNORECASE)
 SUFFIX_RE = re.compile(r"\b(Jr|Sr|II|III|IV)\b\.?", re.IGNORECASE)
+# real entries are semicolon-delimited or cross-references ("see X"); index lines
+# ("Smith, John, 234"), abbreviation keys, and staff lists have neither.
+ENTRY_SIGNAL_RE = re.compile(r";|\bsee\b", re.IGNORECASE)
+
+
+def is_entry_like(text):
+    return bool(ENTRY_SIGNAL_RE.search(text)) and any(c.isalpha() for c in text)
 
 
 def is_page_header(line):
@@ -116,11 +123,14 @@ def parse_volume(volume_dir, htid, series, year, page_range=None, max_entry_char
     lines = []
     for p in paths:
         lines.extend(p.read_text(errors="replace").splitlines())
-    records, skipped = [], 0
+    records, big, noise = [], 0, 0
     for block in tqdm(list(iter_record_blocks(lines)), desc="entries"):
         text = join_block(block)
         if max_entry_chars and len(text) > max_entry_chars:
-            skipped += 1
+            big += 1
+            continue
+        if not is_entry_like(text):
+            noise += 1                      # index line / abbrev key / staff list / stray caps
             continue
         surname, given, middle, suffix = split_name(block[0])
         records.append({
@@ -128,8 +138,8 @@ def parse_volume(volume_dir, htid, series, year, page_range=None, max_entry_char
             "surname": surname, "given_name": given, "middle_name": middle,
             "suffix": suffix, "raw_entry": text,
         })
-    if skipped:
-        print(f"  skipped {skipped} oversized block(s) > {max_entry_chars} chars")
+    print(f"  kept {len(records)} entries | dropped {noise} non-entry blocks "
+          f"(index/front-matter), {big} oversized")
     return records
 
 
