@@ -42,8 +42,9 @@ def is_prose(text):
     if len(words) < 60:
         return False
     # a real directory entry is a semicolon-delimited field list; keep it no matter
-    # how long or how prose-y its award/publication text reads
-    if text.count(";") >= 3:
+    # how long or how prose-y its award/publication text reads. Paratext (ads, notices,
+    # abbreviation keys) has 0-1 semicolons; real bios have 2+.
+    if text.count(";") >= 2:
         return False
     # long AND semicolon-poor: drop only if it is also grammatical prose (ads/prefaces),
     # not a factual index (which has low function-word density)
