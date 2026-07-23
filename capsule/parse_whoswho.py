@@ -84,18 +84,16 @@ def iter_record_blocks(lines):
 
 
 def join_block(block):
-    text = ""
-    for line in block:
-        line = line.strip()
+    out = []
+    for raw in block:
+        line = raw.strip()
         if not line:
             continue
-        if text.endswith("-") and line[:1].islower():
-            text = text[:-1] + line
-        elif text:
-            text = text + " " + line
+        if out and out[-1].endswith("-") and line[:1].islower():
+            out[-1] = out[-1][:-1] + line   # de-hyphenate line break
         else:
-            text = line
-    return text
+            out.append(line)
+    return " ".join(out)
 
 
 def split_name(header_text):
@@ -138,6 +136,9 @@ def parse_volume(volume_dir, htid, series, year, page_range=None, max_entry_char
         lines.extend(p.read_text(errors="replace").splitlines())
     records, big, noise = [], 0, 0
     for block in tqdm(list(iter_record_blocks(lines)), desc="entries"):
+        if len(block) > 4000:            # collapsed non-bio section (headers not detected)
+            big += 1
+            continue
         text = join_block(block)
         if max_entry_chars and len(text) > max_entry_chars:
             big += 1
