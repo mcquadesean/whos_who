@@ -14,6 +14,7 @@ import argparse
 import csv
 import glob
 import os
+import re
 
 try:
     from tqdm import tqdm
@@ -21,17 +22,26 @@ except ImportError:
     def tqdm(x, **k):
         return x
 
+# A factual person entry carries lowercase biographical markers: born "b. ",
+# parentage "s./d. <Name> and ...", marriage "m. ". Index lines / prefaces /
+# abbreviation tables do not. (Case-sensitive: "B." is a middle initial, not born.)
+BIO_MARKER = re.compile(r"(?:^|[;\s])(?:b|m)\.\s|(?:^|[;\s])[sd]\.\s+[A-Z]")
+
 
 def word_count(text):
     return len(text.split())
+
+
+def is_factual_person(text):
+    return bool(BIO_MARKER.search(text))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in-dir", default="/media/secure_volume/parsed")
     ap.add_argument("--out-dir", default="/media/secure_volume/release")
-    ap.add_argument("--max-words", type=int, default=350,
-                    help="drop any entry whose raw_entry exceeds this many words")
+    ap.add_argument("--max-words", type=int, default=400,
+                    help="drop a block only if it exceeds this AND lacks a bio marker")
     ap.add_argument("--show", type=int, default=30)
     a = ap.parse_args()
 
@@ -50,13 +60,16 @@ def main():
             fields = reader.fieldnames
         kept = []
         for row in rows:
-            n = word_count(row.get("raw_entry", ""))
-            if n > a.max_words:
-                dropped.append((n, name, row.get("raw_entry", "")[:140]))
+            text = row.get("raw_entry", "")
+            n = word_count(text)
+            # drop only long blocks that are NOT factual person entries
+            # (index / preface / abbreviation tables); keep prolific real bios.
+            if n > a.max_words and not is_factual_person(text):
+                dropped.append((n, name, text[:140]))
             else:
                 kept.append(row)
                 if n > longest_kept[0]:
-                    longest_kept = (n, name, row.get("raw_entry", "")[:140])
+                    longest_kept = (n, name, text[:140])
         with open(os.path.join(a.out_dir, name), "w", newline="") as f:
             w = csv.DictWriter(f, fieldnames=fields)
             w.writeheader()

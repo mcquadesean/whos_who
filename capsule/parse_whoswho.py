@@ -38,6 +38,14 @@ def is_entry_like(text):
     return bool(ENTRY_SIGNAL_RE.search(text)) and any(c.isalpha() for c in text)
 
 
+# degree / org abbreviations that OCR can present as an ALL-CAPS "surname," header
+ABBREV_HEADERS = {"USA", "US", "USN", "USMC", "AMA", "AAAS", "YMCA", "YWCA", "BPOE",
+                  "GAR", "AB", "BA", "BS", "MA", "MS", "LLB", "LLD", "LLM", "MD",
+                  "PHD", "DD", "DDS", "DVM", "JD", "SB", "SM", "SCD", "PHB", "BD",
+                  "STB", "STD", "DSC", "LITTD", "MSC", "BSC", "EDD"}
+INITIALS_RE = re.compile(r"^[A-Z]\.(\s*[A-Z]\.)*$")   # "A.", "A.M.A.", "U.S.A."
+
+
 def is_page_header(line):
     return bool(PAGE_NUMBER_RE.match(line) or RUNNING_HEADER_RE.match(line))
 
@@ -47,11 +55,16 @@ def looks_like_name_header(line):
     if not m:
         return False
     surname = m.group(1)
-    if not any(c.isalpha() for c in surname):
-        return False
-    # reject if the surname portion has lowercase (i.e. not a caps headword)
     letters = [c for c in surname if c.isalpha()]
-    return letters and not any(c.islower() for c in letters)
+    if not letters or any(c.islower() for c in letters):
+        return False
+    core = surname.strip().strip(",")
+    # reject initials / degree-abbreviation false headers (split-off bio fragments)
+    if INITIALS_RE.match(core):
+        return False
+    if "".join(letters) in ABBREV_HEADERS:
+        return False
+    return len(letters) >= 2
 
 
 def iter_record_blocks(lines):
